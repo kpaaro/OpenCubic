@@ -1,0 +1,46 @@
+name: Release
+
+# Push a tag (v1.0.4) -> build + test everything, then attach the binaries to the
+# GitHub release of that tag. An existing release (e.g. with the CFW images) keeps
+# its assets; without one, a draft release is created.
+on:
+  push:
+    tags: [ "v*" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: aceflash-*
+
+      - name: Name assets like the existing releases
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          mkdir assets
+          cp aceflash-linux-x86_64/aceflash-linux-x86_64.tar.gz "assets/AceFlashTool-${tag}-linux-x86_64.tar.gz"
+          (cd aceflash-windows-x64 && zip -qr "../assets/AceFlashTool-${tag}-windows-x64.zip" AceFlashTool)
+          ls -l assets
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" assets/* --clobber
+          else
+            gh release create "$tag" assets/* --draft --verify-tag --title "$tag" \
+              --notes "Flash tool binaries for ${tag}. Linux: needs Qt 6 and OpenSSL from the distro."
+          fi

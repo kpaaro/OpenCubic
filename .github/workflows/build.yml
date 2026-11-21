@@ -2,16 +2,18 @@ name: Build
 
 on:
   push:
+    branches: [ "**" ]   # tags go through release.yml
     paths: [ "flashtool/**", "ci/**", ".github/workflows/build.yml" ]
   pull_request:
     paths: [ "flashtool/**", "ci/**", ".github/workflows/build.yml" ]
   workflow_dispatch:
+  workflow_call:   # used by release.yml
 
 permissions:
   contents: read
 
 concurrency:
-  group: linux-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -80,9 +82,23 @@ jobs:
           path: dist/aceflash-linux-x86_64.tar.gz
 
   # Upstream's release target: Qt 5.15.2 + MSVC, CLI + GUI, unit tests (no hardware)
+  # 5.15.2 = upstream's release toolchain (build + tests).
+  # 6.8 = the downloadable build: Qt's repo only carries OpenSSL 3 now, which Qt 5.15
+  #       cannot load; Qt 6 + OpenSSL 3 is the TLS stack tested on hardware under Linux.
   windows:
-    name: windows (Qt 5.15.2 MSVC)
+    name: windows (Qt ${{ matrix.qt }} MSVC)
     runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - qt: "5.15.2"
+            arch: win64_msvc2019_64
+            package: false
+          - qt: "6.8.3"
+            arch: win64_msvc2022_64
+            tools: "tools_opensslv3_x64,qt.tools.opensslv3.win_x64"
+            package: true
     steps:
       - uses: actions/checkout@v4
         with:
@@ -90,16 +106,15 @@ jobs:
 
       - uses: jurplel/install-qt-action@v4
         with:
-          version: "5.15.2"
-          arch: win64_msvc2019_64
-          # OpenSSL 1.1.1 DLLs for Qt 5.15 TLS (MQTT on 9883)
-          tools: "tools_openssl_x64,qt.tools.openssl.win_x64"
+          version: ${{ matrix.qt }}
+          arch: ${{ matrix.arch }}
+          tools: ${{ matrix.tools }}
           cache: true
 
       - uses: ilammy/msvc-dev-cmd@v1
 
       - name: Configure
-        run: cmake -S flashtool -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=ON -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR" -DOPENSSL_SRC="$env:IQTA_TOOLS/OpenSSL/Win_x64/bin"
+        run: cmake -S flashtool -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=ON -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"
 
       - name: Build
         run: cmake --build build
@@ -109,24 +124,29 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: ctest --test-dir build --output-on-failure
 
-      # Portable folder: both exes, Qt runtime (windeployqt), qmqtt and OpenSSL DLLs
+      # Portable folder: both exes, Qt runtime (windeployqt), qmqtt and OpenSSL 3 DLLs
       - name: Package
+        if: matrix.package
         run: |
           $dist = "dist/AceFlashTool"
           New-Item -ItemType Directory -Force $dist | Out-Null
           Copy-Item build/AceFlashTool.exe, build/aceflash.exe $dist
-          windeployqt --dir $dist --no-translations --no-opengl-sw --no-angle --no-system-d3d-compiler `
+          windeployqt --dir $dist --no-translations --no-opengl-sw --no-system-d3d-compiler `
             "$dist/AceFlashTool.exe" "$dist/aceflash.exe"
           Get-ChildItem build -Recurse -Filter *.dll |
             Where-Object { $_.FullName -notmatch 'CMakeFiles' -and -not (Test-Path "$dist/$($_.Name)") } |
             Copy-Item -Destination $dist
           Remove-Item -Recurse -Force "$dist/imageformats" -ErrorAction SilentlyContinue
-          foreach ($d in "libssl-1_1-x64.dll", "libcrypto-1_1-x64.dll") {
-            if (-not (Test-Path "$dist/$d")) { throw "$d missing from package" }
+          foreach ($d in "libssl-3-x64.dll", "libcrypto-3-x64.dll") {
+            $src = Get-ChildItem $env:IQTA_TOOLS -Recurse -Filter $d | Select-Object -First 1
+            if (-not $src) { throw "$d not found under $env:IQTA_TOOLS" }
+            Copy-Item $src.FullName $dist
           }
+          if (-not (Test-Path "$dist/tls")) { throw "Qt TLS plugins missing from package" }
           Get-ChildItem $dist -Recurse | Select-Object -ExpandProperty FullName
 
       - uses: actions/upload-artifact@v4
+        if: matrix.package
         with:
           name: aceflash-windows-x64
           path: dist/

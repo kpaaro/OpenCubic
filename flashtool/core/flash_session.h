@@ -66,6 +66,13 @@ QString downloadBlockedHint(const QString& otaState, int requests,
                             const QString& printerIp, quint16 httpPort,
                             const QString& fixedPortHow = QStringLiteral("Re-run with --http-port %1"));
 
+// Explanation for a flash that lost the MQTT connection before the printer fetched the
+// image (requests == 0, update not started): the ACE was not changed, safe to retry.
+// Usual causes: another tool connected to the printer, or a local firewall. Empty = no hint.
+QString connectionLostHint(int requests, bool updateStarted,
+                           const QString& printerIp, quint16 httpPort,
+                           const QString& fixedPortHow = QStringLiteral("Re-run with --http-port %1"));
+
 struct SessionOptions {
     int     testTimeoutMs  = 15000;
     int     flashTimeoutMs = 10 * 60 * 1000;

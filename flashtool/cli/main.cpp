@@ -10,6 +10,9 @@
 #include <QHostAddress>
 #include <QDateTime>
 #include <csignal>
+#ifdef Q_OS_WIN
+#include <QTcpServer>
+#endif
 #include "core/flash_session.h"
 
 #ifndef ACEFLASH_VERSION
@@ -203,7 +206,20 @@ int main(int argc, char* argv[])
             // Prompt blocks the event loop: drop the MQTT session while waiting,
             // then re-test so busy state / connection are fresh when flashing.
             session.disconnectFromPrinter();
-            if (!confirm(q)) {
+#ifdef Q_OS_WIN
+            // Windows Firewall asks on the first listen of a new exe and drops the
+            // printer's download meanwhile. Listen now so the prompt shows up while the
+            // user is still deciding, not in the middle of the flash.
+            QTcpServer firewallProbe;
+            if (firewallProbe.listen(QHostAddress::AnyIPv4, quint16(httpPort)))
+                out() << "If Windows asks to allow aceflash.exe through the firewall, "
+                         "allow it (Private networks) before answering.\n" << Qt::flush;
+#endif
+            const bool yes = confirm(q);
+#ifdef Q_OS_WIN
+            firewallProbe.close();
+#endif
+            if (!yes) {
                 out() << "Aborted.\n";
                 app.exit(ExitRefused);
                 return;

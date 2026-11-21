@@ -132,26 +132,58 @@ bool isOtaReportFor(const QString& topic, const QString& reportTopic,
         && action != QLatin1String("reportVersion");
 }
 
+// "Use a fixed port and allow it" + the firewall commands for this platform.
+static QString firewallRuleHint(const QString& printerIp, quint16 httpPort,
+                                const QString& fixedPortHow)
+{
+    const QString port = QString::number(httpPort ? httpPort : 8765);
+    QString hint;
+    if (!httpPort)
+        hint += fixedPortHow.arg(port) + QStringLiteral(" and allow that port, e.g.:\n");
+    else
+        hint += QStringLiteral("Allow port %1 from the printer, e.g.:\n").arg(port);
+#ifdef Q_OS_WIN
+    hint += QStringLiteral(
+        "  PowerShell (as administrator):\n"
+        "    New-NetFirewallRule -DisplayName \"AceFlash %2\" -Direction Inbound "
+        "-Protocol TCP -LocalPort %2 -RemoteAddress %1 -Action Allow\n"
+        "  or accept the Windows Firewall prompt for this program (Private networks).")
+        .arg(printerIp, port);
+#else
+    hint += QStringLiteral(
+        "  ufw:       sudo ufw allow from %1 to any port %2 proto tcp\n"
+        "  firewalld: sudo firewall-cmd --add-rich-rule='rule family=\"ipv4\" source "
+        "address=\"%1\" port port=\"%2\" protocol=\"tcp\" accept'\n"
+        "See docs/linux-cli.md#firewall.").arg(printerIp, port);
+#endif
+    return hint;
+}
+
 QString downloadBlockedHint(const QString& otaState, int requests,
                             const QString& printerIp, quint16 httpPort,
                             const QString& fixedPortHow)
 {
     if (requests > 0 || !otaState.contains(QLatin1String("download")))
         return {};
-    const QString port = QString::number(httpPort ? httpPort : 8765);
-    QString hint = QStringLiteral(
-        "The printer never fetched the image from this PC - a firewall here is "
-        "probably blocking it. The ACE firmware was not changed.\n");
-    if (!httpPort)
-        hint += fixedPortHow.arg(port) + QStringLiteral(" and allow that port, e.g.:\n");
-    else
-        hint += QStringLiteral("Allow port %1 from the printer, e.g.:\n").arg(port);
-    hint += QStringLiteral(
-        "  ufw:       sudo ufw allow from %1 to any port %2 proto tcp\n"
-        "  firewalld: sudo firewall-cmd --add-rich-rule='rule family=\"ipv4\" source "
-        "address=\"%1\" port port=\"%2\" protocol=\"tcp\" accept'\n"
-        "See docs/linux-cli.md#firewall.").arg(printerIp, port);
-    return hint;
+    return QStringLiteral(
+               "The printer never fetched the image from this PC - a firewall here is "
+               "probably blocking it. The ACE firmware was not changed.\n")
+         + firewallRuleHint(printerIp, httpPort, fixedPortHow);
+}
+
+QString connectionLostHint(int requests, bool updateStarted,
+                           const QString& printerIp, quint16 httpPort,
+                           const QString& fixedPortHow)
+{
+    if (requests > 0 || updateStarted)
+        return {};
+    return QStringLiteral(
+               "The printer had not fetched the image yet, so the ACE firmware was not "
+               "changed - it is safe to retry.\n"
+               "If it fails again: close other tools connected to the printer (another "
+               "AceFlashTool or aceflash), and make sure this PC's firewall lets the "
+               "printer download the image.\n")
+         + firewallRuleHint(printerIp, httpPort, fixedPortHow);
 }
 
 static QByteArray makeEnvelope(const QString& type, const QString& action)
@@ -243,7 +275,9 @@ void FlashSession::onCredentials(const PrinterCredentials& creds)
     emit log(QStringLiteral("MQTT connect %1:%2 ...").arg(creds.mqttHost()).arg(creds.mqttPort()));
     m_mqtt.connectToBroker(creds.mqttHost(), creds.mqttPort(),
                            creds.mqttUser, creds.mqttPass,
-                           QStringLiteral("aceflash"),
+                           // Empty = "aceflash-<random>": a fixed id would make the printer
+                           // drop whichever client (e.g. an open GUI) used it before.
+                           QString(),
                            creds.devicecrt, creds.devicepk);
 }
 
@@ -352,9 +386,13 @@ void FlashSession::onMqttError(const QString& msg)
 {
     if (m_state == State::Discovering || m_state == State::Testing)
         finishTest(false, msg);
-    else if (m_state == State::Flashing)
-        finishFlash(false, msg);
-    else
+    else if (m_state == State::Flashing) {
+        QString why = msg;
+        const QString hint = connectionLostHint(m_http.requestCount(), m_updateStarted,
+                                                m_ip, m_opts.httpPort);
+        if (!hint.isEmpty()) why += QLatin1Char('\n') + hint;
+        finishFlash(false, why);
+    } else
         emit log(QStringLiteral("MQTT error: ") + msg);
 }
 

@@ -243,15 +243,21 @@ private slots:
         // No request reached us + download failure -> hint with the rule
         const QString h = aceflash::downloadBlockedHint("download-failed", 0, ip, 8765);
         QVERIFY(h.contains("firewall"));
+#ifdef Q_OS_WIN
+        QVERIFY(h.contains("New-NetFirewallRule"));
+        QVERIFY(h.contains("-LocalPort 8765 -RemoteAddress 192.168.1.50"));
+        QVERIFY(!h.contains("ufw"));
+#else
         QVERIFY(h.contains("sudo ufw allow from 192.168.1.50 to any port 8765 proto tcp"));
         QVERIFY(h.contains("firewall-cmd"));
+#endif
         QVERIFY(h.contains("not changed"));
         QVERIFY(!h.contains("--http-port"));   // port already fixed
 
         // Random port -> suggest a fixed one
         const QString r = aceflash::downloadBlockedHint("download-failed", 0, ip, 0);
         QVERIFY(r.contains("--http-port 8765"));
-        QVERIFY(r.contains("port 8765 proto tcp"));
+        QVERIFY(r.contains("8765"));
         // GUI wording for the fixed port
         const QString g = aceflash::downloadBlockedHint("download-failed", 0, ip, 0,
                                                         "Restart the tool with ACEFLASH_HTTP_PORT=%1");
@@ -262,6 +268,20 @@ private slots:
         QVERIFY(aceflash::downloadBlockedHint("download-failed", 1, ip, 8765).isEmpty());
         // Failure after the download phase -> no hint
         QVERIFY(aceflash::downloadBlockedHint("update-failed", 0, ip, 8765).isEmpty());
+    }
+
+    void connectionLostHint()
+    {
+        const QString ip = "192.168.1.50";
+        // MQTT dropped before the printer fetched the image -> safe-to-retry hint
+        const QString h = aceflash::connectionLostHint(0, false, ip, 8765);
+        QVERIFY(h.contains("not changed"));
+        QVERIFY(h.contains("safe to retry"));
+        QVERIFY(h.contains("other tools"));
+        QVERIFY(h.contains("8765"));
+        // Image already fetched, or update running -> the ACE may be mid-update: no hint
+        QVERIFY(aceflash::connectionLostHint(1, false, ip, 8765).isEmpty());
+        QVERIFY(aceflash::connectionLostHint(0, true, ip, 8765).isEmpty());
     }
 
     // ── MQTT payload parsing ────────────────────────────────────────────────

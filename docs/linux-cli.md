@@ -149,6 +149,14 @@ sudo firewall-cmd --add-rich-rule='rule family="ipv4" source address="192.168.1.
 
 nftables / iptables: allow inbound TCP 8765 from the printer IP on the LAN interface.
 
+Windows (the CLI is also in the Windows download): Windows Firewall asks once per program on its
+first flash. `aceflash.exe` triggers that prompt before the confirmation question; allow it for
+Private networks. Or add the rule up front in an administrator PowerShell:
+
+```powershell
+New-NetFirewallRule -DisplayName "AceFlash 8765" -Direction Inbound -Protocol TCP -LocalPort 8765 -RemoteAddress 192.168.1.50 -Action Allow
+```
+
 **No sudo, but Docker access?** Ports published by Docker bypass ufw. Run aceflash from the
 compose service with its port published (`--service-ports`) and the host's LAN address passed in;
 `ACEFLASH_FW_DIR` is mounted at `/fw` (default: `originalFirmware/`):
@@ -167,6 +175,9 @@ allocates a terminal, so the confirmation prompt works; add `-T --yes` for scrip
 - **`Discovery: GET /info failed`** — wrong IP, printer off, or LAN mode disabled.
 - **`Test failed: Timeout`** — MQTT (TCP 9883 on the printer) unreachable; check VLAN / AP isolation.
 - **`download-failed`** with the firewall hint — see [Firewall](#firewall).
+- **`MQTT: Remote host disconnected` during flash, before the download** — the ACE was not
+  changed, retry. Close other tools connected to the printer first: every AceFlashTool GUI
+  connects under the same MQTT client id, so two of them push each other off. aceflash uses a random id.
 - **Several network interfaces / VPN** — if the served URL shows the wrong address, pass
   `--local-ip` with the PC's address on the printer's network.
 - **Flash failed after `updating`** — the ACE may not boot. The bootloader is never overwritten by

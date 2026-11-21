@@ -149,11 +149,13 @@ if(WIN32 AND BUILD_GUI)
     get_filename_component(_qt_bin "${_qmake}" DIRECTORY)
     find_program(WINDEPLOYQT windeployqt HINTS "${_qt_bin}")
     if(WINDEPLOYQT)
+        set(_deploy_opts --no-translations --no-opengl-sw)
+        if(QT_VERSION_MAJOR EQUAL 5)
+            list(APPEND _deploy_opts --no-angle)   # option removed in Qt 6
+        endif()
         add_custom_command(TARGET AceFlashTool POST_BUILD
             COMMAND "${WINDEPLOYQT}"
-                --no-translations
-                --no-opengl-sw
-                --no-angle
+                ${_deploy_opts}
                 $<TARGET_FILE:AceFlashTool>
             COMMENT "Deploying Qt DLLs"
         )

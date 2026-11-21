@@ -133,7 +133,8 @@ bool isOtaReportFor(const QString& topic, const QString& reportTopic,
 }
 
 QString downloadBlockedHint(const QString& otaState, int requests,
-                            const QString& printerIp, quint16 httpPort)
+                            const QString& printerIp, quint16 httpPort,
+                            const QString& fixedPortHow)
 {
     if (requests > 0 || !otaState.contains(QLatin1String("download")))
         return {};
@@ -142,7 +143,7 @@ QString downloadBlockedHint(const QString& otaState, int requests,
         "The printer never fetched the image from this PC - a firewall here is "
         "probably blocking it. The ACE firmware was not changed.\n");
     if (!httpPort)
-        hint += QStringLiteral("Re-run with --http-port %1 and allow that port, e.g.:\n").arg(port);
+        hint += fixedPortHow.arg(port) + QStringLiteral(" and allow that port, e.g.:\n");
     else
         hint += QStringLiteral("Allow port %1 from the printer, e.g.:\n").arg(port);
     hint += QStringLiteral(

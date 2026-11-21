@@ -48,6 +48,7 @@ private:
     QString mismatchReason() const;   // empty = image/printer/ACE combination is allowed
     void updateAceIdSpinner();
     void flashDone(bool success);
+    void onImageRequested(const QString& peer);
 
 public slots:
     void appendHttpLog(const QString& entry);
@@ -65,6 +66,7 @@ private:
     PrinterCredentials m_creds;
     FirmwareFile       m_fw;
     HttpServer         m_http;
+    quint16            m_httpPort = 0;   // ACEFLASH_HTTP_PORT, 0 = random
     MqttClient         m_mqtt;
 
     // Test state

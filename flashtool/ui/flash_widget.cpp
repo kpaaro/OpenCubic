@@ -285,7 +285,14 @@ void FlashWidget::onMqttMessage(const QString& topic, const QByteArray& payload)
         log(QStringLiteral("[OTA] %1").arg(st));
         if (p.percent >= 0 && p.result != 1) ui->progressBar->setValue(p.percent);
         if (p.result == 1)       flashDone(true);
-        else if (p.result == -1) flashDone(false);
+        else if (p.result == -1) {
+            // Printer never fetched the image -> almost always a firewall on this PC
+            const QString hint = aceflash::downloadBlockedHint(
+                p.state, m_http.requestCount(), m_creds.ip, m_httpPort,
+                QStringLiteral("Restart the tool with ACEFLASH_HTTP_PORT=%1"));
+            flashDone(false);
+            if (!hint.isEmpty()) log(hint);
+        }
     }
 }
 
@@ -393,11 +400,13 @@ void FlashWidget::onFlashClicked()
     m_http.stop();
     connect(&m_http, &HttpServer::httpLog, this, &FlashWidget::appendHttpLog,
             Qt::UniqueConnection);
+    connect(&m_http, &HttpServer::requestReceived, this, &FlashWidget::onImageRequested,
+            Qt::UniqueConnection);
     // Optional fixed port / address for firewalls and containers (same as the CLI's
     // --http-port / --local-ip): ACEFLASH_HTTP_PORT, ACEFLASH_LOCAL_IP
-    const quint16 httpPort = quint16(qEnvironmentVariableIntValue("ACEFLASH_HTTP_PORT"));
-    const QString localIp  = qEnvironmentVariable("ACEFLASH_LOCAL_IP");
-    if (!m_http.start(container, serveName, m_creds.ip, httpPort, localIp)) {
+    m_httpPort = quint16(qEnvironmentVariableIntValue("ACEFLASH_HTTP_PORT"));
+    const QString localIp = qEnvironmentVariable("ACEFLASH_LOCAL_IP");
+    if (!m_http.start(container, serveName, m_creds.ip, m_httpPort, localIp)) {
         QMessageBox::critical(this, QStringLiteral("Error"), QStringLiteral("Failed to start HTTP server."));
         return;
     }
@@ -425,6 +434,11 @@ void FlashWidget::onFlashClicked()
         m_mqtt.publish(m_otaTopic, m_otaPayload);
         ui->progressBar->setValue(5);
     });
+}
+
+void FlashWidget::onImageRequested(const QString& peer)
+{
+    log(QStringLiteral("  Printer %1 is downloading the image").arg(peer));
 }
 
 void FlashWidget::flashDone(bool success)

@@ -60,9 +60,11 @@ bool isOtaReportFor(const QString& topic, const QString& reportTopic,
 
 // Explanation for a failed OTA download when the printer never fetched the image
 // from this PC (requests == 0): almost always a local firewall. Empty = no hint.
-// httpPort is the configured --http-port (0 = random, a fixed port is suggested).
+// httpPort is the configured fixed port (0 = random, a fixed port is suggested).
+// fixedPortHow tells how to set one; %1 = the suggested port.
 QString downloadBlockedHint(const QString& otaState, int requests,
-                            const QString& printerIp, quint16 httpPort);
+                            const QString& printerIp, quint16 httpPort,
+                            const QString& fixedPortHow = QStringLiteral("Re-run with --http-port %1"));
 
 struct SessionOptions {
     int     testTimeoutMs  = 15000;

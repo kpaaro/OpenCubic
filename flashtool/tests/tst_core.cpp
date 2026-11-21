@@ -252,6 +252,11 @@ private slots:
         const QString r = aceflash::downloadBlockedHint("download-failed", 0, ip, 0);
         QVERIFY(r.contains("--http-port 8765"));
         QVERIFY(r.contains("port 8765 proto tcp"));
+        // GUI wording for the fixed port
+        const QString g = aceflash::downloadBlockedHint("download-failed", 0, ip, 0,
+                                                        "Restart the tool with ACEFLASH_HTTP_PORT=%1");
+        QVERIFY(g.contains("ACEFLASH_HTTP_PORT=8765 and allow"));
+        QVERIFY(!g.contains("--http-port"));
 
         // Printer did fetch the file -> not a firewall problem
         QVERIFY(aceflash::downloadBlockedHint("download-failed", 1, ip, 8765).isEmpty());

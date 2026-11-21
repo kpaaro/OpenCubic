@@ -1,7 +1,7 @@
 name: Release
 
 # Push a tag (v1.0.4) -> build + test everything, then attach the binaries to the
-# GitHub release of that tag. An existing release (e.g. with the CFW images) keeps
+# GitHub release of that tag (Linux tarball; Windows zip once CI packages one). An existing release (e.g. with the CFW images) keeps
 # its assets; without one, a draft release is created.
 on:
   push:
@@ -29,7 +29,9 @@ jobs:
           tag="${GITHUB_REF_NAME}"
           mkdir assets
           cp aceflash-linux-x86_64/aceflash-linux-x86_64.tar.gz "assets/AceFlashTool-${tag}-linux-x86_64.tar.gz"
-          (cd aceflash-windows-x64 && zip -qr "../assets/AceFlashTool-${tag}-windows-x64.zip" AceFlashTool)
+          if [ -d aceflash-windows-x64 ]; then   # Windows package only once CI builds one
+            (cd aceflash-windows-x64 && zip -qr "../assets/AceFlashTool-${tag}-windows-x64.zip" AceFlashTool)
+          fi
           ls -l assets
 
       - name: Upload to release

@@ -82,23 +82,12 @@ jobs:
           path: dist/aceflash-linux-x86_64.tar.gz
 
   # Upstream's release target: Qt 5.15.2 + MSVC, CLI + GUI, unit tests (no hardware)
-  # 5.15.2 = upstream's release toolchain (build + tests).
-  # 6.8 = the downloadable build: Qt's repo only carries OpenSSL 3 now, which Qt 5.15
-  #       cannot load; Qt 6 + OpenSSL 3 is the TLS stack tested on hardware under Linux.
+  # Upstream's release toolchain: Qt 5.15.2 + MSVC, CLI + GUI, unit tests (no hardware).
+  # A Qt 6.8 Windows package (OpenSSL 3) is in progress; Qt's repo no longer ships the
+  # OpenSSL 1.1 DLLs Qt 5.15 needs, so this job does not package.
   windows:
-    name: windows (Qt ${{ matrix.qt }} MSVC)
+    name: windows (Qt 5.15.2 MSVC)
     runs-on: windows-2022
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - qt: "5.15.2"
-            arch: win64_msvc2019_64
-            package: false
-          - qt: "6.8.3"
-            arch: win64_msvc2022_64
-            tools: "tools_opensslv3_x64,qt.tools.opensslv3.win_x64"
-            package: true
     steps:
       - uses: actions/checkout@v4
         with:
@@ -106,9 +95,8 @@ jobs:
 
       - uses: jurplel/install-qt-action@v4
         with:
-          version: ${{ matrix.qt }}
-          arch: ${{ matrix.arch }}
-          tools: ${{ matrix.tools }}
+          version: "5.15.2"
+          arch: win64_msvc2019_64
           cache: true
 
       - uses: ilammy/msvc-dev-cmd@v1
@@ -122,43 +110,4 @@ jobs:
       - name: Test
         env:
           QT_QPA_PLATFORM: offscreen
-        run: |
-          $env:PATH = "$env:QT_ROOT_DIR\bin;$env:PATH"
-          $env:QT_PLUGIN_PATH = "$env:QT_ROOT_DIR\plugins"
-          ctest --test-dir build --output-on-failure
-          if ($LASTEXITCODE) {
-            & build/aceflash.exe --version; "aceflash exit: $LASTEXITCODE"
-            & build/tst_gui.exe -functions; "functions exit: $LASTEXITCODE"
-            $env:QT_DEBUG_PLUGINS = "1"
-            cmd /c "build\tst_gui.exe -v2 -o tst_gui.txt,txt 2>&1"
-            "tst_gui exit code: 0x{0:X}" -f $LASTEXITCODE
-            Get-Content tst_gui.txt -ErrorAction SilentlyContinue
-            exit 1
-          }
-
-      # Portable folder: both exes, Qt runtime (windeployqt), qmqtt and OpenSSL 3 DLLs
-      - name: Package
-        if: matrix.package
-        run: |
-          $dist = "dist/AceFlashTool"
-          New-Item -ItemType Directory -Force $dist | Out-Null
-          Copy-Item build/AceFlashTool.exe, build/aceflash.exe $dist
-          windeployqt --dir $dist --no-translations --no-opengl-sw --no-system-d3d-compiler `
-            "$dist/AceFlashTool.exe" "$dist/aceflash.exe"
-          Get-ChildItem build -Recurse -Filter *.dll |
-            Where-Object { $_.FullName -notmatch 'CMakeFiles' -and -not (Test-Path "$dist/$($_.Name)") } |
-            Copy-Item -Destination $dist
-          Remove-Item -Recurse -Force "$dist/imageformats" -ErrorAction SilentlyContinue
-          foreach ($d in "libssl-3-x64.dll", "libcrypto-3-x64.dll") {
-            $src = Get-ChildItem $env:IQTA_TOOLS -Recurse -Filter $d | Select-Object -First 1
-            if (-not $src) { throw "$d not found under $env:IQTA_TOOLS" }
-            Copy-Item $src.FullName $dist
-          }
-          if (-not (Test-Path "$dist/tls")) { throw "Qt TLS plugins missing from package" }
-          Get-ChildItem $dist -Recurse | Select-Object -ExpandProperty FullName
-
-      - uses: actions/upload-artifact@v4
-        if: matrix.package
-        with:
-          name: aceflash-windows-x64
-          path: dist/
+        run: ctest --test-dir build --output-on-failure --timeout 120

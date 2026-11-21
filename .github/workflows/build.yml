@@ -122,7 +122,15 @@ jobs:
       - name: Test
         env:
           QT_QPA_PLATFORM: offscreen
-        run: ctest --test-dir build --output-on-failure
+        run: |
+          $env:PATH = "$env:QT_ROOT_DIR\bin;$env:PATH"
+          $env:QT_PLUGIN_PATH = "$env:QT_ROOT_DIR\plugins"
+          ctest --test-dir build --output-on-failure
+          if ($LASTEXITCODE) {
+            & build/tst_gui.exe -v2
+            "tst_gui exit code: 0x{0:X}" -f $LASTEXITCODE
+            exit 1
+          }
 
       # Portable folder: both exes, Qt runtime (windeployqt), qmqtt and OpenSSL 3 DLLs
       - name: Package

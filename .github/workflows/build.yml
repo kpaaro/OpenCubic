@@ -59,6 +59,26 @@ jobs:
           path: shots/
           if-no-files-found: ignore
 
+      # Release binaries for testers. Built on Ubuntu 24.04 (oldest Qt here, 6.4) so they
+      # run on newer distros too; need the system Qt 6 + OpenSSL packages.
+      - name: Release binaries
+        if: matrix.distro == 'ubuntu'
+        run: |
+          mkdir -p dist
+          docker run --rm -v "$PWD:/src:ro" -v "$PWD/dist:/out" aceflash-ubuntu:ci bash -c '
+            cp -r /src/flashtool /w &&
+            cmake -S /w -B /b -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=ON -DBUILD_TESTING=OFF &&
+            ninja -C /b aceflash AceFlashTool &&
+            strip /b/aceflash /b/AceFlashTool &&
+            tar -C /b -czf /out/aceflash-linux-x86_64.tar.gz aceflash AceFlashTool &&
+            chown -R '"$(id -u):$(id -g)"' /out'
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.distro == 'ubuntu'
+        with:
+          name: aceflash-linux-x86_64
+          path: dist/aceflash-linux-x86_64.tar.gz
+
   # Upstream's release target: Qt 5.15.2 + MSVC, CLI + GUI, unit tests (no hardware)
   windows:
     name: windows (Qt 5.15.2 MSVC)
@@ -72,12 +92,14 @@ jobs:
         with:
           version: "5.15.2"
           arch: win64_msvc2019_64
+          # OpenSSL 1.1.1 DLLs for Qt 5.15 TLS (MQTT on 9883)
+          tools: "tools_openssl_x64,qt.tools.openssl.win_x64"
           cache: true
 
       - uses: ilammy/msvc-dev-cmd@v1
 
       - name: Configure
-        run: cmake -S flashtool -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=ON -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"
+        run: cmake -S flashtool -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=ON -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR" -DOPENSSL_SRC="$env:IQTA_TOOLS/OpenSSL/Win_x64/bin"
 
       - name: Build
         run: cmake --build build
@@ -86,3 +108,25 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: ctest --test-dir build --output-on-failure
+
+      # Portable folder: both exes, Qt runtime (windeployqt), qmqtt and OpenSSL DLLs
+      - name: Package
+        run: |
+          $dist = "dist/AceFlashTool"
+          New-Item -ItemType Directory -Force $dist | Out-Null
+          Copy-Item build/AceFlashTool.exe, build/aceflash.exe $dist
+          windeployqt --dir $dist --no-translations --no-opengl-sw --no-angle --no-system-d3d-compiler `
+            "$dist/AceFlashTool.exe" "$dist/aceflash.exe"
+          Get-ChildItem build -Recurse -Filter *.dll |
+            Where-Object { $_.FullName -notmatch 'CMakeFiles' -and -not (Test-Path "$dist/$($_.Name)") } |
+            Copy-Item -Destination $dist
+          Remove-Item -Recurse -Force "$dist/imageformats" -ErrorAction SilentlyContinue
+          foreach ($d in "libssl-1_1-x64.dll", "libcrypto-1_1-x64.dll") {
+            if (-not (Test-Path "$dist/$d")) { throw "$d missing from package" }
+          }
+          Get-ChildItem $dist -Recurse | Select-Object -ExpandProperty FullName
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aceflash-windows-x64
+          path: dist/

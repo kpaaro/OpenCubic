@@ -127,8 +127,12 @@ jobs:
           $env:QT_PLUGIN_PATH = "$env:QT_ROOT_DIR\plugins"
           ctest --test-dir build --output-on-failure
           if ($LASTEXITCODE) {
-            & build/tst_gui.exe -v2
+            & build/aceflash.exe --version; "aceflash exit: $LASTEXITCODE"
+            & build/tst_gui.exe -functions; "functions exit: $LASTEXITCODE"
+            $env:QT_DEBUG_PLUGINS = "1"
+            cmd /c "build\tst_gui.exe -v2 -o tst_gui.txt,txt 2>&1"
             "tst_gui exit code: 0x{0:X}" -f $LASTEXITCODE
+            Get-Content tst_gui.txt -ErrorAction SilentlyContinue
             exit 1
           }
 

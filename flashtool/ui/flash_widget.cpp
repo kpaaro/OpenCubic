@@ -250,15 +250,14 @@ void FlashWidget::onMqttMessage(const QString& topic, const QByteArray& payload)
                 const int aceId   = aceBox[QStringLiteral("id")].toInt();
                 const int modelId = aceBox[QStringLiteral("model_id")].toInt(0);   // newer printer FW only
                 if (modelId > 0) m_aceModelIds.insert(aceId, modelId);
-                const QString modelStr =
-                    modelId == 40002 ? QStringLiteral("  model=ACE 2 Pro") :
-                    modelId == 40001 ? QStringLiteral("  model=ACE 1 Pro") :
-                    modelId > 0      ? QStringLiteral("  model=%1").arg(modelId) : QString();
-                log(QStringLiteral("    ACE%1  status=%2  temp=%3 C%4")
+                // Same wording as the CLI: "ACE0  ACE 1 Pro (Gen 1)  status=1  temp=33 C"
+                const QString modelStr = modelId > 0
+                    ? QStringLiteral("  ") + aceflash::aceModelName(modelId) : QString();
+                log(QStringLiteral("    ACE%1%2  status=%3  temp=%4 C")
                     .arg(aceId)
+                    .arg(modelStr)
                     .arg(aceBox[QStringLiteral("status")].toInt())
-                    .arg(aceBox[QStringLiteral("temp")].toInt())
-                    .arg(modelStr));
+                    .arg(aceBox[QStringLiteral("temp")].toInt()));
 
                 QJsonArray aceSlots = aceBox[QStringLiteral("slots")].toArray();
                 for (int si = 0; si < aceSlots.size(); ++si) {
@@ -267,7 +266,7 @@ void FlashWidget::onMqttMessage(const QString& topic, const QByteArray& payload)
                     int     slStatus = sl[QStringLiteral("status")].toInt();
                     if (!slType.isEmpty() && slStatus != 4) {
                         QString slSku = sl[QStringLiteral("sku")].toString();
-                        log(QStringLiteral("      Slot%1  %2  %3  %4%%")
+                        log(QStringLiteral("      Slot%1  %2  %3  %4%")   // QString::arg() keeps "%%" literally
                             .arg(sl[QStringLiteral("index")].toInt())
                             .arg(slType)
                             .arg(slSku.isEmpty() ? QStringLiteral("-") : slSku)

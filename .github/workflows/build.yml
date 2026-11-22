@@ -159,8 +159,10 @@ jobs:
           }
           # Smoke test of the packaged CLI with only the package on PATH
           $env:PATH = "$((Resolve-Path $dist).Path);C:\Windows\System32"
-          & "$dist/aceflash.exe" --help | Select-Object -First 3
+          $ver = & "$dist/aceflash.exe" --version
           if ($LASTEXITCODE) { throw "packaged aceflash.exe failed: $LASTEXITCODE" }
+          if ("$ver" -notmatch '^aceflash \d') { throw "aceflash.exe --version printed '$ver'" }
+          $ver
           Get-ChildItem $dist -Recurse -File | ForEach-Object { "{0,10}  {1}" -f $_.Length, $_.FullName.Substring((Resolve-Path $dist).Path.Length + 1) }
 
       - uses: actions/upload-artifact@v4

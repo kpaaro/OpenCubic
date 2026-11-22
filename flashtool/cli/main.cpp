@@ -61,8 +61,8 @@ int main(int argc, char* argv[])
         "Commands:\n"
         "  test    Discover printer, connect MQTT, list connected ACE units (read-only)\n"
         "  flash   Run test, then flash --file onto ACE --ace"));
-    p.addHelpOption();
-    p.addVersionOption();
+    const QCommandLineOption optHelp = p.addHelpOption();
+    const QCommandLineOption optVersion = p.addVersionOption();
     p.addPositionalArgument(QStringLiteral("command"), QStringLiteral("test | flash"));
 
     const QCommandLineOption optIp({QStringLiteral("i"), QStringLiteral("ip")},
@@ -88,7 +88,21 @@ int main(int argc, char* argv[])
     const QCommandLineOption optVerbose(QStringLiteral("verbose"),
         QStringLiteral("Print raw HTTP/MQTT traffic to stderr (contains printer credentials)."));
     p.addOptions({optIp, optFile, optAce, optYes, optHttpPort, optLocalIp, optTimeout, optVerbose});
-    p.process(app);
+    // Not p.process(): on Windows it shows --help/--version/errors in a message box when
+    // stdout is a pipe without a console window, so nothing reaches the terminal or log.
+    if (!p.parse(app.arguments())) {
+        err() << p.errorText() << "\nRun 'aceflash --help' for all options.\n" << Qt::flush;
+        return ExitUsage;
+    }
+    if (p.isSet(optHelp)) {
+        out() << p.helpText() << Qt::flush;
+        return ExitOk;
+    }
+    if (p.isSet(optVersion)) {
+        out() << QCoreApplication::applicationName() << ' '
+              << QCoreApplication::applicationVersion() << '\n' << Qt::flush;
+        return ExitOk;
+    }
 
     const QStringList args = p.positionalArguments();
     const QString cmd = args.value(0);

@@ -19,8 +19,7 @@ aceflash flash --ip 192.168.1.50 --file ACE_V1.3.863_20261103.bin
 other KlipperGo models, multiple ACE units. Those paths share code with the GUI and are covered by
 unit tests only. Reports welcome.
 
-The Qt GUI (`AceFlashTool`) also builds and runs on Linux with `-DBUILD_GUI=ON`; see
-[GUI on Linux](#gui-on-linux).
+The Qt GUI (`AceFlashTool`) builds and runs on Linux too; see [GUI on Linux](#gui-on-linux).
 
 ## Build
 
@@ -46,17 +45,18 @@ git clone --recurse-submodules https://github.com/Jupsi/OpenCubic.git
 cmake -S OpenCubic/flashtool -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ctest --test-dir build --output-on-failure
-sudo cmake --install build        # optional: installs aceflash to /usr/local/bin
+sudo cmake --install build        # optional: installs aceflash + AceFlashTool to /usr/local/bin
 ```
 
-CMake options: `BUILD_CLI` (ON), `BUILD_GUI` (OFF on Linux), `BUILD_TESTING` (ON),
+CMake options: `BUILD_CLI` (ON), `BUILD_GUI` (ON; `OFF` for a CLI-only build without Qt Widgets), `BUILD_TESTING` (ON),
 `ACEFLASH_QT_MAJOR` (`6` default on Linux, set `5` to force Qt 5).
 
 ### GUI on Linux
 
+The build above already includes it:
+
 ```bash
-cmake -S OpenCubic/flashtool -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=ON
-cmake --build build && ./build/AceFlashTool
+./build/AceFlashTool
 ```
 
 On Debian/Ubuntu also install `qt6-qpa-plugins` (the X11/xcb platform plugin) if the window does

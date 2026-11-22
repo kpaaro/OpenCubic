@@ -9,11 +9,8 @@ set(CMAKE_AUTORCC ON)
 
 # BUILD_GUI: Qt Widgets desktop app (AceFlashTool)
 # BUILD_CLI: headless command-line flasher (aceflash) — Linux/macOS/Windows
-if(WIN32)
-    option(BUILD_GUI "Build the Qt GUI flash tool" ON)
-else()
-    option(BUILD_GUI "Build the Qt GUI flash tool" OFF)
-endif()
+# Headless machines without Qt Widgets: -DBUILD_GUI=OFF
+option(BUILD_GUI "Build the Qt GUI flash tool" ON)
 option(BUILD_CLI "Build the aceflash command-line tool" ON)
 option(BUILD_TESTING "Build the QtTest unit tests" ON)
 
@@ -125,6 +122,10 @@ if(BUILD_GUI)
     )
     add_executable(AceFlashTool WIN32 main.cpp)
     target_link_libraries(AceFlashTool PRIVATE aceflash_ui)
+    if(NOT WIN32)
+        include(GNUInstallDirs)
+        install(TARGETS AceFlashTool RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    endif()
 endif()
 
 # OpenSSL 1.1.1 DLLs — not bundled with Qt 5.15 MSVC; typically found in Qt Creator's bin dir

@@ -70,6 +70,17 @@ ACEFLASH_HTTP_PORT=8765 ./build/AceFlashTool
 
 `ACEFLASH_LOCAL_IP` overrides the address the printer downloads from (needed in containers).
 
+| GUI environment variable | CLI equivalent | Meaning |
+|---|---|---|
+| `ACEFLASH_HTTP_PORT` | `--http-port` | Fixed port for the firmware download (default: random) |
+| `ACEFLASH_LOCAL_IP` | `--local-ip` | Address the printer downloads from (default: auto-detected) |
+
+On Windows (PowerShell) the same works for `AceFlashTool.exe`:
+
+```powershell
+$env:ACEFLASH_HTTP_PORT = "8765"; .\AceFlashTool.exe
+```
+
 Without installing anything on the host, build and test in Docker with
 [`ci/compose.yaml`](../ci/compose.yaml) (run from the repo root):
 

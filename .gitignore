@@ -8,3 +8,4 @@ flashtool/third_party/qmqtt/
 .vscode/settings.json
 
 ci/shots/
+.DS_Store

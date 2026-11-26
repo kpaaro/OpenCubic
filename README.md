@@ -72,7 +72,7 @@ This repo contains the **ACE Flash Tool** — a Qt desktop application that flas
 your local network (MQTT via your printer), for both ACE generations.
 
 → See [docs/how-to-flash.md](docs/how-to-flash.md)  
-→ Linux / command line: [docs/linux-cli.md](docs/linux-cli.md)
+→ Linux / macOS / command line: [docs/linux-cli.md](docs/linux-cli.md)
 
 ### Build the Flash Tool
 

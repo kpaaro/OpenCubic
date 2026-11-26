@@ -1,13 +1,18 @@
 #include "crypto.h"
 #include <QCryptographicHash>
 
-#ifdef _WIN32
-// Windows BCrypt for AES-128-CBC
+// AES-128-CBC backend per platform, all system libraries except on Linux:
+//   Windows: BCrypt
+//   macOS:   CommonCrypto (part of libSystem, nothing to link)
+//   Linux:   OpenSSL libcrypto (EVP)
+// macOS backend from ozgunawesome's Jupsi/OpenCubic#6.
+#if defined(_WIN32)
 #include <windows.h>
 #include <bcrypt.h>
 #pragma comment(lib, "Bcrypt.lib")
+#elif defined(__APPLE__)
+#include <CommonCrypto/CommonCryptor.h>
 #else
-// OpenSSL EVP for AES-128-CBC (Linux / macOS)
 #include <openssl/evp.h>
 #endif
 
@@ -23,12 +28,36 @@ QString ctrlSign(const QString& token, const QString& ts, const QString& nonce)
     return md5Hex((md5Hex(token.left(16).toLatin1()) + ts + nonce).toLatin1());
 }
 
-#ifndef _WIN32
+#if defined(__APPLE__)
 
 QByteArray aes128CbcDecrypt(const QByteArray& cipher,
                             const QByteArray& key,
                             const QByteArray& iv)
 {
+    if (cipher.isEmpty() || cipher.size() % 16 != 0) return {};
+    const QByteArray ivCopy  = iv.left(16).leftJustified(16, '\0');
+    const QByteArray keyCopy = key.left(16).leftJustified(16, '\0');
+
+    QByteArray plain(cipher.size() + 16, '\0');
+    size_t plainLen = 0;
+    const CCCryptorStatus status = CCCrypt(
+        kCCDecrypt, kCCAlgorithmAES, kCCOptionPKCS7Padding,   // PKCS#7, same as BCRYPT_BLOCK_PADDING
+        keyCopy.constData(), kCCKeySizeAES128,
+        ivCopy.constData(),
+        cipher.constData(), static_cast<size_t>(cipher.size()),
+        plain.data(), static_cast<size_t>(plain.size()), &plainLen);
+    if (status != kCCSuccess) return {};
+    plain.resize(static_cast<int>(plainLen));
+    return plain;
+}
+
+#elif !defined(_WIN32)
+
+QByteArray aes128CbcDecrypt(const QByteArray& cipher,
+                            const QByteArray& key,
+                            const QByteArray& iv)
+{
+    if (cipher.isEmpty() || cipher.size() % 16 != 0) return {};
     const QByteArray ivCopy  = iv.left(16).leftJustified(16, '\0');
     const QByteArray keyCopy = key.left(16).leftJustified(16, '\0');
 
@@ -62,6 +91,7 @@ QByteArray aes128CbcDecrypt(const QByteArray& cipher,
                             const QByteArray& key,
                             const QByteArray& iv)
 {
+    if (cipher.isEmpty() || cipher.size() % 16 != 0) return {};
     // We need a writable IV copy (BCrypt modifies it)
     QByteArray ivCopy = iv.left(16).leftJustified(16, '\0');
     QByteArray keyCopy = key.left(16).leftJustified(16, '\0');
@@ -115,6 +145,6 @@ QByteArray aes128CbcDecrypt(const QByteArray& cipher,
     return plain;
 }
 
-#endif // _WIN32
+#endif // platform backend
 
 } // namespace aceflash

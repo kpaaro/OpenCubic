@@ -15,6 +15,7 @@ option(BUILD_CLI "Build the aceflash command-line tool" ON)
 option(BUILD_TESTING "Build the QtTest unit tests" ON)
 
 # Qt 5.15.2 msvc2019_64 — override with -DCMAKE_PREFIX_PATH=<path>
+# macOS (Homebrew): -DCMAKE_PREFIX_PATH="$(brew --prefix qt)" (or qt@5 with -DACEFLASH_QT_MAJOR=5)
 if(WIN32 AND NOT DEFINED CMAKE_PREFIX_PATH)
     set(CMAKE_PREFIX_PATH "E:/Qt/5.15.2/msvc2019_64")
 endif()
@@ -47,7 +48,9 @@ endif()
 set(QT_VERSION_MAJOR ${ACEFLASH_QT_MAJOR})
 message(STATUS "Using Qt${QT_VERSION_MAJOR}")
 
-if(NOT WIN32)
+# AES-128-CBC for Discovery: BCrypt (Windows), CommonCrypto (macOS, in libSystem),
+# OpenSSL libcrypto (Linux)
+if(UNIX AND NOT APPLE)
     find_package(OpenSSL REQUIRED COMPONENTS Crypto)
 endif()
 
@@ -72,10 +75,11 @@ target_link_libraries(aceflash_core PUBLIC
     qmqtt
 )
 if(WIN32)
-    target_link_libraries(aceflash_core PUBLIC Bcrypt)   # Windows AES-128-CBC for Discovery
-else()
-    target_link_libraries(aceflash_core PUBLIC OpenSSL::Crypto)
+    target_link_libraries(aceflash_core PUBLIC Bcrypt)            # AES-128-CBC for Discovery
+elseif(NOT APPLE)
+    target_link_libraries(aceflash_core PUBLIC OpenSSL::Crypto)   # AES-128-CBC for Discovery
 endif()
+# (macOS: CommonCrypto is part of libSystem — nothing to link)
 
 # ── CLI ─────────────────────────────────────────────────────────────────────
 if(BUILD_CLI)
@@ -120,11 +124,35 @@ if(BUILD_GUI)
         Qt${QT_VERSION_MAJOR}::Gui
         Qt${QT_VERSION_MAJOR}::Widgets
     )
-    add_executable(AceFlashTool WIN32 main.cpp)
+    add_executable(AceFlashTool WIN32 MACOSX_BUNDLE main.cpp)
     target_link_libraries(AceFlashTool PRIVATE aceflash_ui)
     if(NOT WIN32)
         include(GNUInstallDirs)
-        install(TARGETS AceFlashTool RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+        install(TARGETS AceFlashTool
+            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+            BUNDLE  DESTINATION .)
+    endif()
+
+    # ── macOS app bundle (from ozgunawesome's Jupsi/OpenCubic#6) ────────────
+    if(APPLE)
+        set_target_properties(AceFlashTool PROPERTIES
+            MACOSX_BUNDLE_BUNDLE_NAME          "ACE Flash Tool"
+            MACOSX_BUNDLE_BUNDLE_VERSION       "${PROJECT_VERSION}"
+            MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+            MACOSX_BUNDLE_GUI_IDENTIFIER       "org.anycubic-cfw.AceFlashTool"
+            MACOSX_BUNDLE_INFO_PLIST           "${CMAKE_CURRENT_SOURCE_DIR}/macos/Info.plist.in"
+        )
+        # Apple Silicon only runs signed binaries. Default "-" = ad-hoc signature (no Apple account).
+        # Pass -DACEFLASHTOOL_CODESIGN_IDENTITY="Apple Development: ..." to sign with your own identity.
+        set(ACEFLASHTOOL_CODESIGN_IDENTITY "-" CACHE STRING "codesign identity for the .app (\"-\" = ad-hoc)")
+        add_custom_command(TARGET AceFlashTool POST_BUILD
+            COMMAND codesign --force --deep --sign "${ACEFLASHTOOL_CODESIGN_IDENTITY}"
+                --entitlements "${CMAKE_CURRENT_SOURCE_DIR}/macos/AceFlashTool.entitlements"
+                --timestamp=none
+                "$<TARGET_BUNDLE_DIR:AceFlashTool>"
+            COMMENT "Signing AceFlashTool.app (${ACEFLASHTOOL_CODESIGN_IDENTITY})"
+            VERBATIM
+        )
     endif()
 endif()
 

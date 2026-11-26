@@ -170,3 +170,74 @@ jobs:
         with:
           name: aceflash-windows-x64
           path: dist/
+
+  # Community-supported build (not part of the release assets): proves the macOS
+  # backends (CommonCrypto, app bundle, ad-hoc signing) still build and pass the tests.
+  macos:
+    name: macos (Qt 6.8 arm64)
+    runs-on: macos-15
+    # Community-supported: report, never block release.yml's publish (needs: build)
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.8.3"
+          cache: true
+
+      - name: Install Ninja
+        run: command -v ninja || brew install ninja
+
+      - name: Configure
+        run: cmake -S flashtool -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=ON -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR"
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        timeout-minutes: 5
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QT_QPA_FONTDIR: /System/Library/Fonts
+        run: ctest --test-dir build --output-on-failure --timeout 120
+
+      - name: Check bundle and signature
+        run: |
+          app=build/AceFlashTool.app
+          /usr/libexec/PlistBuddy -c 'Print :NSLocalNetworkUsageDescription' "$app/Contents/Info.plist"
+          codesign --verify --strict --verbose=2 "$app"
+          codesign -d --entitlements - "$app" | grep -q com.apple.security.network.server
+          # CommonCrypto backend: no OpenSSL linked in
+          ! otool -L "$app/Contents/MacOS/AceFlashTool" build/aceflash | grep -i -E 'libssl|libcrypto'
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: debug-build-macos
+          path: build/
+
+      # Self-contained .app with the CLI next to the GUI binary, re-signed ad-hoc after
+      # macdeployqt rewrote the load paths. Downloaded copies need
+      # `xattr -dr com.apple.quarantine AceFlashTool.app` (not notarised).
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp -R build/AceFlashTool.app dist/
+          cp build/aceflash dist/AceFlashTool.app/Contents/MacOS/
+          macdeployqt dist/AceFlashTool.app -executable=dist/AceFlashTool.app/Contents/MacOS/aceflash
+          ls dist/AceFlashTool.app/Contents/PlugIns/tls/
+          codesign --force --deep --sign - --timestamp=none \
+            --entitlements flashtool/macos/AceFlashTool.entitlements dist/AceFlashTool.app
+          codesign --verify --strict dist/AceFlashTool.app
+          ver=$(env -i dist/AceFlashTool.app/Contents/MacOS/aceflash --version)
+          [[ "$ver" =~ ^aceflash\ [0-9] ]] || { echo "aceflash --version printed '$ver'"; exit 1; }
+          echo "$ver"
+          (cd dist && ditto -c -k --keepParent AceFlashTool.app aceflash-macos-arm64.zip)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm64
+          path: dist/aceflash-macos-arm64.zip

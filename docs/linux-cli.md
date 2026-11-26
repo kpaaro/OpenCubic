@@ -2,7 +2,7 @@
 
 `aceflash` is a headless command-line build of the ACE Flash Tool. It uses the same core
 (discovery, MQTT, packaging, OTA) and the same safety checks as the Windows GUI, and runs on
-Linux (and should run on macOS / Windows, where it is untested).
+Linux and macOS (community-supported, built and tested in CI, not on hardware) and Windows.
 
 ```
 aceflash test  --ip 192.168.1.50
@@ -23,7 +23,8 @@ The Qt GUI (`AceFlashTool`) builds and runs on Linux too; see [GUI on Linux](#gu
 
 ## Build
 
-Requirements: CMake ≥ 3.20, a C++17 compiler, Qt 6 (or Qt 5.15) Core + Network, OpenSSL (libcrypto).
+Requirements: CMake ≥ 3.20, a C++17 compiler, Qt 6 (or Qt 5.15) Core + Network, OpenSSL (libcrypto, Linux only —
+Windows uses BCrypt, macOS CommonCrypto).
 `unzip` and `tar` are needed only to run the tests.
 
 Arch / CachyOS:
@@ -50,6 +51,36 @@ sudo cmake --install build        # optional: installs aceflash + AceFlashTool t
 
 CMake options: `BUILD_CLI` (ON), `BUILD_GUI` (ON; `OFF` for a CLI-only build without Qt Widgets), `BUILD_TESTING` (ON),
 `ACEFLASH_QT_MAJOR` (`6` default on Linux, set `5` to force Qt 5).
+
+### macOS (community-supported)
+
+Apple Silicon or Intel, with [Homebrew](https://brew.sh). macOS support (CommonCrypto, app bundle,
+signing) comes from [@ozgunawesome](https://github.com/ozgunawesome)'s
+[#6](https://github.com/Jupsi/OpenCubic/pull/6). No OpenSSL needed: AES uses CommonCrypto and Qt's
+TLS uses the system backend.
+
+```bash
+brew install cmake ninja qt
+git clone --recurse-submodules https://github.com/Jupsi/OpenCubic.git
+cmake -S OpenCubic/flashtool -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
+cmake --build build
+ctest --test-dir build --output-on-failure
+open build/AceFlashTool.app       # GUI
+./build/aceflash test --ip 192.168.1.50
+```
+
+- Qt 5 instead: `brew install qt@5` and `-DACEFLASH_QT_MAJOR=5 -DCMAKE_PREFIX_PATH="$(brew --prefix qt@5)"`.
+- The `.app` is signed **ad-hoc** by default (Apple Silicon requires a signature; no Apple account needed).
+  Own identity: `-DACEFLASHTOOL_CODESIGN_IDENTITY="Apple Development: …"`.
+- **Local Network:** allow it when macOS asks on first start, or the printer is never discovered.
+  Changed your mind: System Settings → Privacy & Security → Local Network. `aceflash` run from a
+  terminal uses the terminal app's permission.
+- Self-contained `.app`: `"$(brew --prefix qt)/bin/macdeployqt" build/AceFlashTool.app`, then re-sign
+  (`codesign --force --deep --sign - --entitlements flashtool/macos/AceFlashTool.entitlements build/AceFlashTool.app`).
+- The CI build (`macos-arm64` artifact) is not notarised: after downloading run
+  `xattr -dr com.apple.quarantine AceFlashTool.app`. The CLI is at `AceFlashTool.app/Contents/MacOS/aceflash`.
+- The macOS firewall (if on) asks to allow incoming connections — allow it, the printer downloads
+  the firmware from the tool.
 
 ### GUI on Linux
 

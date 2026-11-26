@@ -30,6 +30,10 @@ void MqttClient::connectToBroker(const QString& host, quint16 port,
         emit error(QStringLiteral(
             "SSL not available — OpenSSL DLLs missing. "
             "libssl-1_1-x64.dll and libcrypto-1_1-x64.dll must be placed next to the .exe."));
+#elif defined(Q_OS_MACOS)
+        emit error(QStringLiteral(
+            "SSL not available — Qt Network has no TLS backend. "
+            "Check that the Qt TLS plugins (securetransport / openssl) were deployed with the app."));
 #else
         emit error(QStringLiteral(
             "SSL not available — Qt has no TLS backend. Install OpenSSL (libssl) "

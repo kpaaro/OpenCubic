@@ -18,9 +18,12 @@ private slots:
     {
 #if QT_VERSION >= QT_VERSION_CHECK(6, 3, 0)
         // Any Qt warning (missing plugin, bad layout, failed connect) fails the test,
-        // except the offscreen platform's harmless size-hint notice.
-        QTest::failOnWarning(QRegularExpression(
-            QStringLiteral("^(?!This plugin does not support propagateSizeHints).*")));
+        // except two harmless offscreen-platform notices: the size-hint one, and on
+        // macOS the font-alias one (offscreen's default family "Sans Serif" does not
+        // exist among the system fonts; the real Cocoa platform uses the system font).
+        QTest::failOnWarning(QRegularExpression(QStringLiteral(
+            "^(?!This plugin does not support propagateSizeHints"
+            "|Populating font family aliases took).*")));
 #endif
     }
 

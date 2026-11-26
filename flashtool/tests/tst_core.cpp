@@ -56,6 +56,14 @@ private slots:
         QVERIFY(!plain.startsWith("{\"deviceId\""));
     }
 
+    void aesDecrypt_rejectsNonBlockInput()
+    {
+        const QByteArray key = QByteArrayLiteral("0123456789abcdef");
+        const QByteArray iv  = QByteArrayLiteral("fedcba9876543210");
+        QVERIFY(aceflash::aes128CbcDecrypt(QByteArray(), key, iv).isEmpty());
+        QVERIFY(aceflash::aes128CbcDecrypt(QByteArray(17, 'x'), key, iv).isEmpty());
+    }
+
     void ctrlSign_matchesReference()
     {
         // printf '%s' "$(printf 'TOKENTOKENTOKEN1' | md5sum | cut -d' ' -f1)17000000000001234567" | md5sum
